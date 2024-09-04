@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload de PDF et affichage de vignettes</title>
+    <link rel="stylesheet" href="/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.7.4/lottie.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.worker.min.js';
+    </script>
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Upload de PDF et affichage de vignettes</h1>
+
+        <div class="upload-section">
+            <label for="pdfFile">Sélectionner un fichier PDF :</label>
+            <input type="file" name="pdfFile" id="pdfFile" accept=".pdf">
+            <button id="uploadButton" disabled>Uploader le fichier</button>
+        </div>
+
+        <div id="overall-progress" style="display: none;">
+            <div>Progression globale:</div>
+            <div class="progress-bar">
+                <div class="progress"></div>
+            </div>
+        </div>
+
+        <div id="status-message" aria-live="polite"></div>
+
+        <div class="tabs" role="tablist">
+            <button id="tab-plan" class="tab active" role="tab" aria-selected="true" aria-controls="tab-plan-content">Plan</button>
+            <button id="tab-takeoff" class="tab" role="tab" aria-selected="false" aria-controls="tab-takeoff-content">TakeOff</button>
+        </div>
+
+        <div id="tab-plan-content" class="tab-content active" role="tabpanel" aria-labelledby="tab-plan">
+            <button id="delete-selected">Supprimer la sélection</button>
+            <div id="thumbnails"></div>
+        </div>
+
+        <div id="tab-takeoff-content" class="tab-content" role="tabpanel" aria-labelledby="tab-takeoff">
+            <div id="measurement-tools">
+                <label for="scale">Échelle (mètres par pixel):</label>
+                <input type="number" id="scale" step="0.01" value="0.01">
+                <button id="measure-line">Mesurer une ligne</button>
+                <button id="measure-perimeter">Mesurer un périmètre</button>
+                <button id="measure-area">Mesurer une surface</button>
+                <button id="reset-measurements">Réinitialiser les mesures</button>
+            </div>
+            <div id="canvas-container">
+                <canvas id="canvas"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2024 PlaniPro. Tous droits réservés.</p>
+    </footer>
+
+    <script src="/js/main.js"></script>
+    <script src="/js/plan.js"></script>
+    <script src="/js/takeoff.js"></script>
+</body>
+</html>

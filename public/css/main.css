@@ -1,0 +1,230 @@
+:root {
+    --primary-color: #4caf50;
+    --background-color: #f3f3f3;
+    --border-color: #ccc;
+    --thumbnail-width: 350px;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 20px;
+    background-color: #f4f4f4;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #fff;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+h1 {
+    color: var(--primary-color);
+}
+
+input[type="file"] {
+    margin-bottom: 20px;
+}
+
+#status-message {
+    margin-bottom: 20px;
+    padding: 10px;
+    background-color: #e0e0e0;
+    border-radius: 5px;
+}
+
+.tabs {
+    display: flex;
+    cursor: pointer;
+    margin-top: 20px;
+}
+
+.tab {
+    padding: 10px 20px;
+    border: 1px solid var(--border-color);
+    margin-right: 10px;
+    background-color: #fff;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+    .tab:hover {
+        background-color: var(--background-color);
+    }
+
+    .tab.active {
+        background-color: var(--primary-color);
+        color: #fff;
+    }
+
+.tab-content {
+    display: none;
+    padding: 20px;
+    border: 1px solid var(--border-color);
+    margin-top: -1px;
+}
+
+    .tab-content.active {
+        display: block;
+    }
+
+#thumbnails {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.thumbnail {
+    position: relative;
+    display: inline-block;
+    margin: 10px;
+}
+
+    .thumbnail img {
+        max-width: 200px;
+        height: auto;
+        display: block;
+    }
+
+        .thumbnail img:hover {
+            transform: scale(1.05);
+        }
+
+.progressBarContainer {
+    width: 100%;
+    background-color: var(--background-color);
+    margin-top: 10px;
+}
+
+.progressBar {
+    width: 0%;
+    height: 20px;
+    background-color: var(--primary-color);
+    text-align: center;
+    line-height: 20px;
+    color: white;
+    transition: width 0.3s ease;
+}
+
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10;
+}
+
+    .loading-overlay .lottie-container {
+        width: 200px;
+        height: 200px;
+    }
+
+#measurement-tools {
+    margin-bottom: 20px;
+}
+
+    #measurement-tools label,
+    #measurement-tools input,
+    #measurement-tools button {
+        margin-right: 10px;
+        margin-bottom: 10px;
+    }
+
+    #measurement-tools button {
+        padding: 5px 10px;
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+    }
+
+        #measurement-tools button:hover {
+            background-color: darken(var(--primary-color), 10%);
+        }
+
+#canvas-container {
+    max-width: 100%;
+    overflow: auto;
+}
+
+#canvas {
+    border: 1px solid var(--border-color);
+}
+
+footer {
+    margin-top: 40px;
+    text-align: center;
+    color: #666;
+}
+
+@media (max-width: 768px) {
+    .tabs {
+        flex-direction: column;
+    }
+
+    .tab {
+        margin-right: 0;
+        margin-bottom: 10px;
+    }
+
+    .thumbnail {
+        width: 100%;
+    }
+}
+#uploadButton {
+    /* Styles de base du bouton */
+}
+
+    #uploadButton:disabled,
+    #uploadButton.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+.new-thumbnail .progress-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--progress-overlay-color, rgba(0, 0, 0, 0.5));
+    color: white;
+    font-weight: bold;
+}
+
+.new-thumbnail .progress-text {
+    font-size: 16px;
+}
+.thumbnail-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.thumbnail-select {
+    margin-right: 5px;
+}
+
+#delete-selected {
+    margin-bottom: 10px;
+    padding: 5px 10px;
+    background-color: #f44336;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+    #delete-selected:hover {
+        background-color: #d32f2f;
+    }

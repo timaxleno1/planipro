@@ -1,0 +1,3 @@
+C:\Users\Mimmo\source\repos\takeoffApp\takeoffApp\obj\Debug\takeoffApp.njsproj.AssemblyReference.cache
+C:\Users\Mimmo\source\repos\takeoffApp\takeoffApp\obj\Debug\takeoffApp.njsproj.CoreCompileInputs.cache
+C:\Users\Mimmo\source\repos\takeoffApp\takeoffApp\bin\Microsoft.NodejsTools.WebRole.dll
