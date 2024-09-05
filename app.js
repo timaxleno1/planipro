@@ -287,8 +287,8 @@ app.post('/delete-thumbnail', async (req, res) => {
 });
 
 // Démarrer le serveur
-server.listen(port, () => {
-    console.log(`Serveur démarré sur http://localhost:${port}`);
+server.listen(port, '0.0.0.0', () => {
+    console.log(`Serveur démarré sur http://0.0.0.0:${port}`);
 });
 
 io.on('connection', (socket) => {
