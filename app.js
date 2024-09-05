@@ -7,9 +7,24 @@ const pdf = require('pdf-poppler');
 const http = require('http');
 const socketIo = require('socket.io');
 const sharp = require('sharp');
+const { glob } = require('glob');
+const util = require('util');
+
+// Utilisez la version promise de glob
+const globPromise = (pattern, options) => {
+    return new Promise((resolve, reject) => {
+        glob(pattern, options, (err, files) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(files);
+            }
+        });
+    });
+};
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 // Création du serveur HTTP
 const server = http.createServer(app);
@@ -109,8 +124,12 @@ async function processFile(fileInfo) {
             const overallProgress = (completedPages / totalPages) * 100;
             io.to(fileInfo.socketId).emit('overallProgress', { percentComplete: overallProgress });
         } catch (error) {
-            console.error(`Erreur lors de la conversion de la page ${page.pageNumber}:`, error);
-            io.to(fileInfo.socketId).emit('pageConversionError', { page: page.pageNumber, error: error.message });
+            console.error(`Erreur détaillée lors de la conversion de la page ${page.pageNumber}:`, error);
+            io.to(fileInfo.socketId).emit('pageConversionError', {
+                page: page.pageNumber,
+                error: error.message,
+                stack: error.stack
+            });
         }
     });
 
@@ -118,7 +137,6 @@ async function processFile(fileInfo) {
     console.log("Traitement de toutes les pages terminé");
 }
 
-// Fonction pour extraire chaque page du PDF principal
 async function extractPages(pdfPath, pdfFileName) {
     const pdfBytes = await fs.readFile(pdfPath);
     const pdfDoc = await PDFDocument.load(pdfBytes);
@@ -137,41 +155,47 @@ async function extractPages(pdfPath, pdfFileName) {
     return pages;
 }
 
-// Fonction pour convertir chaque page en haute résolution et envoyer des mises à jour de progression
 async function convertPage(socketId, pageNumber, pdfPath, pdfFileName) {
     console.log(`Début de la conversion de la page ${pageNumber} du fichier ${pdfFileName}`);
-    const imageName = `${pdfFileName}-page-${pageNumber}.png`;
-    const imagePath = path.join(__dirname, 'highres', imageName);
+    const expectedImageName = `${pdfFileName}-page-${pageNumber}.png`;
+    const expectedImagePath = path.join(__dirname, 'highres', expectedImageName);
+    const actualImageName = `${pdfFileName}-${pageNumber}.png`;
+    const actualImagePath = path.join(__dirname, actualImageName);
 
-    console.log(`Chemin de l'image à générer : ${imagePath}`);
+    console.log(`Chemin de l'image attendu : ${expectedImagePath}`);
+    console.log(`Chemin de l'image généré : ${actualImagePath}`);
 
     const opts = {
         format: 'png',
-        out_dir: path.dirname(imagePath),
-        out_prefix: path.basename(imagePath, '.png'),
+        out_dir: __dirname,  // Utilisez le répertoire racine du projet
+        out_prefix: pdfFileName,
         page: pageNumber,
-        scale: 2.0,  // Ajustez cette valeur selon vos besoins de qualité
+        scale: 2.0,
     };
 
     try {
         await pdf.convert(pdfPath, opts);
         console.log(`Conversion réussie pour la page ${pageNumber}`);
 
-        if (await fs.access(imagePath).then(() => true).catch(() => false)) {
-            console.log(`L'image générée existe pour la page ${pageNumber}`);
+        if (await fs.access(actualImagePath).then(() => true).catch(() => false)) {
+            console.log(`Fichier généré trouvé : ${actualImagePath}`);
 
-            await generateThumbnail(imagePath, pageNumber, socketId, pdfFileName);
+            // Déplacer et renommer le fichier
+            await fs.rename(actualImagePath, expectedImagePath);
+            console.log(`Image déplacée et renommée de ${actualImageName} à ${expectedImageName}`);
+
+            await generateThumbnail(expectedImagePath, pageNumber, socketId, pdfFileName);
             console.log(`Vignette générée pour la page ${pageNumber}`);
 
             io.to(socketId).emit('conversionProgress', {
                 page: pageNumber,
                 percentComplete: 100,
-                highRes: `/highres/${imageName}`
+                highRes: `/highres/${expectedImageName}`
             });
 
-            return imagePath;
+            return expectedImagePath;
         } else {
-            throw new Error(`L'image générée n'existe pas : ${imagePath}`);
+            throw new Error(`Le fichier généré n'a pas été trouvé : ${actualImagePath}`);
         }
     } catch (error) {
         console.error(`Erreur lors de la conversion de la page ${pageNumber}:`, error);
@@ -180,7 +204,6 @@ async function convertPage(socketId, pageNumber, pdfPath, pdfFileName) {
     }
 }
 
-// Fonction pour générer les vignettes
 async function generateThumbnail(imagePath, pageNumber, socketId, pdfFileName) {
     const thumbnailName = `THUMB_${pdfFileName}-page-${pageNumber}.png`;
     const thumbnailPath = path.join(__dirname, 'thumbnails', thumbnailName);
@@ -215,7 +238,7 @@ app.get('/thumbnails', async (req, res) => {
                     return {
                         page: parseInt(pageNumber, 10),
                         thumbnail: `/thumbnails/${file}`,
-                        highRes: `/highres/${pdfFileName}-page-${pageNumber}_1.png`,
+                        highRes: `/highres/${pdfFileName}-page-${pageNumber}.png`,
                         pdfFileName: pdfFileName
                     };
                 }
@@ -246,7 +269,7 @@ app.post('/delete-thumbnail', async (req, res) => {
             console.log(`La vignette n'existe pas : ${thumbnailPath}`);
         }
 
-        const highResPath = path.join(__dirname, 'highres', `${pdfFileName}-page-${page}_1.png`);
+        const highResPath = path.join(__dirname, 'highres', `${pdfFileName}-page-${page}.png`);
         console.log(`Chemin de l'image haute résolution : ${highResPath}`);
 
         if (await fs.access(highResPath).then(() => true).catch(() => false)) {
