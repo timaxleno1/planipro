@@ -2,11 +2,15 @@ document.addEventListener('DOMContentLoaded', function () {
     const socket = io();
     let socketId = null;
     let selectedFile = null;
+    let totalPages = 0;
+    let convertedPages = 0;
 
     const fileInput = document.getElementById('pdfFile');
     const uploadButton = document.getElementById('uploadButton');
     const thumbnailsDiv = document.getElementById('thumbnails');
     const deleteSelectedButton = document.getElementById('delete-selected');
+    const overallProgressDiv = document.getElementById('overall-progress');
+    const overallProgressBar = overallProgressDiv.querySelector('.progress');
 
     console.log("Éléments initiaux :", { fileInput, uploadButton, thumbnailsDiv, deleteSelectedButton });
 
@@ -33,7 +37,6 @@ document.addEventListener('DOMContentLoaded', function () {
         if (selectedFile) {
             console.log("Fichier sélectionné:", selectedFile.name);
             uploadButton.disabled = false;
-            displayPdfThumbnails(selectedFile);
         } else {
             console.log("Aucun fichier sélectionné");
             uploadButton.disabled = true;
@@ -53,48 +56,6 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    function displayPdfThumbnails(file) {
-        const reader = new FileReader();
-        reader.onload = function (e) {
-            const typedarray = new Uint8Array(e.target.result);
-
-            pdfjsLib.getDocument(typedarray).promise.then(function (pdf) {
-                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                    pdf.getPage(pageNum).then(function (page) {
-                        const scale = 1.5;
-                        const viewport = page.getViewport({ scale: scale });
-                        const canvas = document.createElement('canvas');
-                        const context = canvas.getContext('2d');
-                        canvas.height = viewport.height;
-                        canvas.width = viewport.width;
-
-                        const renderContext = {
-                            canvasContext: context,
-                            viewport: viewport
-                        };
-                        page.render(renderContext).promise.then(() => {
-                            const thumbnailDiv = document.createElement('div');
-                            thumbnailDiv.className = 'thumbnail new-thumbnail';
-                            thumbnailDiv.id = `thumbnail-${pageNum}`;
-                            thumbnailDiv.innerHTML = `
-                                <div class="thumbnail-header">
-                                    <input type="checkbox" id="select-${pageNum}" class="thumbnail-select">
-                                    <label for="select-${pageNum}">Page ${pageNum}</label>
-                                </div>
-                                <img src="${canvas.toDataURL()}" alt="Page ${pageNum}">
-                                <div class="progress-overlay">
-                                    <div class="progress-text">En attente...</div>
-                                </div>
-                            `;
-                            thumbnailsDiv.appendChild(thumbnailDiv);
-                        });
-                    });
-                }
-            });
-        };
-        reader.readAsArrayBuffer(file);
-    }
-
     function handleFileUpload(file) {
         console.log("Début de l'upload du fichier :", file.name);
 
@@ -102,8 +63,8 @@ document.addEventListener('DOMContentLoaded', function () {
         formData.append('pdfFile', file);
         formData.append('socketId', socketId);
 
-        document.getElementById('overall-progress').style.display = 'block';
-        document.getElementById('overall-progress').querySelector('.progress').style.width = '0%';
+        overallProgressDiv.style.display = 'block';
+        updateOverallProgress(0);
 
         fetch('/upload', {
             method: 'POST',
@@ -142,66 +103,55 @@ document.addEventListener('DOMContentLoaded', function () {
                 fileInput.value = '';
                 uploadButton.disabled = true;
                 selectedFile = null;
-                document.getElementById('overall-progress').style.display = 'none';
                 console.log("Formulaire et bouton réinitialisés");
-
             });
     }
 
-    socket.on('conversionProgress', (data) => {
-        console.log("Progression de la conversion reçue:", data);
-        const thumbnailDiv = document.querySelector(`#thumbnail-${data.page}.new-thumbnail`);
-        if (thumbnailDiv) {
-            const progressOverlay = thumbnailDiv.querySelector('.progress-overlay');
-            const progressText = thumbnailDiv.querySelector('.progress-text');
-            if (progressOverlay && progressText) {
-                progressText.textContent = `${Math.round(data.percentComplete)}%`;
-            }
-            if (data.previewImage) {
-                const img = thumbnailDiv.querySelector('img');
-                if (img) {
-                    img.src = data.previewImage;
-                }
-            }
-        }
+    socket.on('conversionStarted', (data) => {
+        console.log("Début de la conversion, nombre total de pages:", data.totalPages);
+        totalPages = data.totalPages;
+        convertedPages = 0;
+        updateOverallProgress(0);
     });
 
     socket.on('thumbnailGenerated', (data) => {
         console.log("Vignette générée reçue:", data);
-        const thumbnailDiv = document.querySelector(`#thumbnail-${data.page}.new-thumbnail`);
-        if (thumbnailDiv) {
-            const img = thumbnailDiv.querySelector('img');
-            if (img) {
-                img.src = data.thumbnail;
-            }
-            const progressOverlay = thumbnailDiv.querySelector('.progress-overlay');
-            if (progressOverlay) {
-                progressOverlay.style.display = 'none';
-            }
-            thumbnailDiv.classList.remove('new-thumbnail');
+        const thumbnailDiv = createThumbnailElement(data);
+        thumbnailsDiv.appendChild(thumbnailDiv);
+
+        convertedPages++;
+        updateOverallProgress((convertedPages / totalPages) * 100);
+
+        if (convertedPages === totalPages) {
+            console.log("Toutes les pages ont été converties");
+            overallProgressDiv.style.display = 'none';
         }
     });
 
-    socket.on('overallProgress', (data) => {
-        console.log("Progression globale reçue:", data);
-        const overallProgressDiv = document.getElementById('overall-progress');
-        const progressBar = overallProgressDiv.querySelector('.progress');
-        overallProgressDiv.style.display = 'block';
-        progressBar.style.width = `${data.percentComplete}%`;
-        progressBar.textContent = `${Math.round(data.percentComplete)}%`;
-    });
+    function updateOverallProgress(percentage) {
+        overallProgressBar.style.width = `${percentage}%`;
+        overallProgressBar.textContent = `${Math.round(percentage)}%`;
+    }
 
     function createThumbnailElement(data) {
-        console.log("Création de vignette avec les données:", data); // Log pour vérifier les données reçues
+        console.log("Création de vignette avec les données:", data);
         const thumbnailDiv = document.createElement('div');
         thumbnailDiv.id = `thumbnail-${data.pdfFileName}-${data.page}`;
         thumbnailDiv.className = 'thumbnail';
+
+        const aspectRatio = data.width / data.height;
+        const thumbnailWidth = 200; // Largeur fixe de la vignette
+        const thumbnailHeight = Math.round(thumbnailWidth / aspectRatio);
+
         thumbnailDiv.innerHTML = `
         <div class="thumbnail-header">
             <input type="checkbox" id="select-${data.pdfFileName}-${data.page}" class="thumbnail-select">
             <label for="select-${data.pdfFileName}-${data.page}">Page ${data.page}</label>
         </div>
-        <img src="${data.thumbnail}" alt="Page ${data.page} of ${data.pdfFileName}">
+        <div class="thumbnail-image" style="width:${thumbnailWidth}px; height:${thumbnailHeight}px;">
+            <img src="${data.thumbnail}" alt="Page ${data.page} of ${data.pdfFileName}" style="width:100%; height:100%; object-fit:contain;">
+        </div>
+        <div class="thumbnail-footer">${data.pdfFileName}</div>
     `;
 
         thumbnailDiv.addEventListener('click', (event) => {
@@ -237,28 +187,6 @@ document.addEventListener('DOMContentLoaded', function () {
         return thumbnailDiv;
     }
 
-    function loadExistingThumbnails() {
-        console.log("Chargement des vignettes existantes...");
-        fetch('/thumbnails')
-            .then(response => response.json())
-            .then(data => {
-                console.log("Données des vignettes reçues:", data);
-                data.thumbnails.sort((a, b) => naturalCompare(a.thumbnail, b.thumbnail));
-                data.thumbnails.forEach(thumbnail => {
-                    const thumbnailDiv = createThumbnailElement(thumbnail);
-                    thumbnailsDiv.appendChild(thumbnailDiv);
-                });
-                console.log("Vignettes existantes chargées et affichées");
-            })
-            .catch(error => {
-                console.error('Erreur lors de la récupération des vignettes existantes:', error);
-            });
-    }
-
-    function naturalCompare(a, b) {
-        return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
-    }
-
     function setupCanvasInteraction(canvas, context, image) {
         console.log("Configuration de l'interaction avec le canvas");
         // Implémentez ici la logique d'interaction avec le canvas
@@ -276,9 +204,9 @@ document.addEventListener('DOMContentLoaded', function () {
             checkedBoxes.forEach(checkbox => {
                 const thumbnailDiv = checkbox.closest('.thumbnail');
                 const thumbnailId = thumbnailDiv.id;
-                console.log("ID de la vignette à supprimer:", thumbnailId); // Log pour vérification
+                console.log("ID de la vignette à supprimer:", thumbnailId);
                 const [, pdfFileName, pageNumber] = thumbnailId.split('-');
-                console.log("Données extraites:", { pdfFileName, pageNumber }); // Log pour vérification
+                console.log("Données extraites:", { pdfFileName, pageNumber });
 
                 console.log(`Tentative de suppression - PDF: ${pdfFileName}, Page: ${pageNumber}`);
 
@@ -310,6 +238,28 @@ document.addEventListener('DOMContentLoaded', function () {
                     });
             });
         }
+    }
+
+    function loadExistingThumbnails() {
+        console.log("Chargement des vignettes existantes...");
+        fetch('/thumbnails')
+            .then(response => response.json())
+            .then(data => {
+                console.log("Données des vignettes reçues:", data);
+                data.thumbnails.sort((a, b) => naturalCompare(a.thumbnail, b.thumbnail));
+                data.thumbnails.forEach(thumbnail => {
+                    const thumbnailDiv = createThumbnailElement(thumbnail);
+                    thumbnailsDiv.appendChild(thumbnailDiv);
+                });
+                console.log("Vignettes existantes chargées et affichées");
+            })
+            .catch(error => {
+                console.error('Erreur lors de la récupération des vignettes existantes:', error);
+            });
+    }
+
+    function naturalCompare(a, b) {
+        return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
     }
 
     loadExistingThumbnails();

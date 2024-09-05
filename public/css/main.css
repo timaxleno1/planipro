@@ -78,9 +78,21 @@ input[type="file"] {
 }
 
 .thumbnail {
-    position: relative;
-    display: inline-block;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     margin: 10px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+}
+
+.thumbnail-footer {
+    width: 100%;
+    text-align: center;
+    margin-top: 5px;
+    font-size: 0.8em;
+    word-break: break-word;
 }
 
     .thumbnail img {
@@ -207,8 +219,8 @@ footer {
     font-size: 16px;
 }
 .thumbnail-header {
-    display: flex;
-    align-items: center;
+    width: 100%;
+    text-align: left;
     margin-bottom: 5px;
 }
 
@@ -227,4 +239,18 @@ footer {
 
     #delete-selected:hover {
         background-color: #d32f2f;
+    }
+
+.thumbnail-image {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    background-color: #f0f0f0;
+}
+
+    .thumbnail-image img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
     }

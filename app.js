@@ -2,13 +2,12 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
-const { PDFDocument } = require('pdf-lib');
-const pdf = require('pdf-poppler');
+const { PDFDocument, rgb } = require('pdf-lib');
+const { fromPath } = require('pdf2pic');
 const http = require('http');
 const socketIo = require('socket.io');
 const sharp = require('sharp');
 const { glob } = require('glob');
-const util = require('util');
 
 // Utilisez la version promise de glob
 const globPromise = (pattern, options) => {
@@ -109,32 +108,28 @@ async function processFile(fileInfo) {
     const pdfPath = fileInfo.path;
     const pdfFileName = path.basename(pdfPath, path.extname(pdfPath));
 
-    // Extraire chaque page en tant que PDF individuel
-    const pages = await extractPages(pdfPath, pdfFileName);
-    console.log(`Nombre de pages extraites: ${pages.length}`);
+    try {
+        const pdfBytes = await fs.readFile(pdfPath);
+        const pdfDoc = await PDFDocument.load(pdfBytes);
+        const totalPages = pdfDoc.getPageCount();
 
-    // Convertir chaque page individuellement et envoyer des mises à jour de progression
-    const totalPages = pages.length;
-    let completedPages = 0;
+        console.log(`Nombre de pages: ${totalPages}`);
 
-    const conversionPromises = pages.map(async (page) => {
-        try {
-            await convertPage(fileInfo.socketId, page.pageNumber, pdfPath, pdfFileName);
-            completedPages++;
-            const overallProgress = (completedPages / totalPages) * 100;
-            io.to(fileInfo.socketId).emit('overallProgress', { percentComplete: overallProgress });
-        } catch (error) {
-            console.error(`Erreur détaillée lors de la conversion de la page ${page.pageNumber}:`, error);
-            io.to(fileInfo.socketId).emit('pageConversionError', {
-                page: page.pageNumber,
-                error: error.message,
-                stack: error.stack
-            });
+        // Envoyer l'événement de début de conversion
+        io.to(fileInfo.socketId).emit('conversionStarted', { totalPages: totalPages });
+
+        const conversionPromises = [];
+        for (let i = 1; i <= totalPages; i++) {
+            conversionPromises.push(convertPage(fileInfo.socketId, i, pdfPath, pdfFileName));
         }
-    });
 
-    await Promise.all(conversionPromises);
-    console.log("Traitement de toutes les pages terminé");
+        await Promise.all(conversionPromises);
+
+        console.log("Traitement de toutes les pages terminé");
+    } catch (error) {
+        console.error('Erreur lors du traitement du fichier:', error);
+        throw error;
+    }
 }
 
 async function extractPages(pdfPath, pdfFileName) {
@@ -155,43 +150,73 @@ async function extractPages(pdfPath, pdfFileName) {
     return pages;
 }
 
-const { fromPath } = require('pdf2pic');
-
 async function convertPage(socketId, pageNumber, pdfPath, pdfFileName) {
     console.log(`Début de la conversion de la page ${pageNumber} du fichier ${pdfFileName}`);
-    const expectedImageName = `${pdfFileName}-page-${pageNumber}.png`;
-    const expectedImagePath = path.join(__dirname, 'highres', expectedImageName);
-
-    const options = {
-        density: 300,
-        saveFilename: `${pdfFileName}-page-${pageNumber}`,
-        savePath: path.join(__dirname, 'highres'),
-        format: "png",
-        width: 2000,
-        height: 2000
-    };
+    const finalImageName = `${pdfFileName}-page-${pageNumber}.png`;
+    const finalImagePath = path.join(__dirname, 'highres', finalImageName);
+    const thumbnailPath = path.join(__dirname, 'thumbnails', `THUMB_${finalImageName}`);
 
     try {
-        const storeAsImage = fromPath(pdfPath, options);
-        const pageToConvertAsImage = pageNumber;
+        const pdfBytes = await fs.readFile(pdfPath);
+        const pdfDoc = await PDFDocument.load(pdfBytes);
+        const page = pdfDoc.getPages()[pageNumber - 1];
 
-        const result = await storeAsImage(pageToConvertAsImage);
+        const { width, height } = page.getSize();
+        const scale = 3; // Ajustez cette valeur pour la qualité de l'image haute résolution
+
+        // Créer un nouveau document PDF avec une seule page
+        const newPdfDoc = await PDFDocument.create();
+        const [newPage] = await newPdfDoc.copyPages(pdfDoc, [pageNumber - 1]);
+        newPdfDoc.addPage(newPage);
+
+        // Sauvegarder la page comme un nouveau fichier PDF temporaire
+        const tempPdfPath = path.join(__dirname, 'temp', `${pdfFileName}-page-${pageNumber}.pdf`);
+        const pdfBytes2 = await newPdfDoc.save();
+        await fs.writeFile(tempPdfPath, pdfBytes2);
+
+        // Convertir le PDF en image avec pdf2pic
+        const options = {
+            density: 300,
+            saveFilename: `${pdfFileName}-page-${pageNumber}`,
+            savePath: path.join(__dirname, 'temp'),
+            format: "png",
+            width: Math.round(width * scale),
+            height: Math.round(height * scale)
+        };
+        const convert = fromPath(tempPdfPath, options);
+        const pageOutput = await convert(1); // Convertir seulement la première page
+
+        // Utiliser sharp pour redimensionner et sauvegarder l'image haute résolution
+        await sharp(pageOutput.path)
+            .png()
+            .toFile(finalImagePath);
+
+        // Générer et sauvegarder la vignette
+        await sharp(finalImagePath)
+            .resize({
+                width: 200,
+                height: 200,
+                fit: sharp.fit.inside,
+                withoutEnlargement: true
+            })
+            .toFile(thumbnailPath);
+
+        // Nettoyer les fichiers temporaires
+        await fs.unlink(tempPdfPath);
+        await fs.unlink(pageOutput.path);
+
         console.log(`Conversion réussie pour la page ${pageNumber}`);
 
-        if (result.path) {
-            await generateThumbnail(result.path, pageNumber, socketId, pdfFileName);
-            console.log(`Vignette générée pour la page ${pageNumber}`);
+        io.to(socketId).emit('thumbnailGenerated', {
+            page: pageNumber,
+            thumbnail: `/thumbnails/THUMB_${finalImageName}`,
+            highRes: `/highres/${finalImageName}`,
+            pdfFileName: pdfFileName,
+            width: width,
+            height: height
+        });
 
-            io.to(socketId).emit('conversionProgress', {
-                page: pageNumber,
-                percentComplete: 100,
-                highRes: `/highres/${expectedImageName}`
-            });
-
-            return result.path;
-        } else {
-            throw new Error(`Le fichier généré n'a pas été trouvé pour la page ${pageNumber}`);
-        }
+        return finalImagePath;
     } catch (error) {
         console.error(`Erreur lors de la conversion de la page ${pageNumber}:`, error);
         io.to(socketId).emit('error', { message: `Erreur lors de la conversion de la page ${pageNumber}` });
