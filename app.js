@@ -155,36 +155,31 @@ async function extractPages(pdfPath, pdfFileName) {
     return pages;
 }
 
+const { fromPath } = require('pdf2pic');
+
 async function convertPage(socketId, pageNumber, pdfPath, pdfFileName) {
     console.log(`Début de la conversion de la page ${pageNumber} du fichier ${pdfFileName}`);
     const expectedImageName = `${pdfFileName}-page-${pageNumber}.png`;
     const expectedImagePath = path.join(__dirname, 'highres', expectedImageName);
-    const actualImageName = `${pdfFileName}-${pageNumber}.png`;
-    const actualImagePath = path.join(__dirname, actualImageName);
 
-    console.log(`Chemin de l'image attendu : ${expectedImagePath}`);
-    console.log(`Chemin de l'image généré : ${actualImagePath}`);
-
-    const opts = {
-        format: 'png',
-        out_dir: __dirname,  // Utilisez le répertoire racine du projet
-        out_prefix: pdfFileName,
-        page: pageNumber,
-        scale: 2.0,
+    const options = {
+        density: 300,
+        saveFilename: `${pdfFileName}-page-${pageNumber}`,
+        savePath: path.join(__dirname, 'highres'),
+        format: "png",
+        width: 2000,
+        height: 2000
     };
 
     try {
-        await pdf.convert(pdfPath, opts);
+        const storeAsImage = fromPath(pdfPath, options);
+        const pageToConvertAsImage = pageNumber;
+
+        const result = await storeAsImage(pageToConvertAsImage);
         console.log(`Conversion réussie pour la page ${pageNumber}`);
 
-        if (await fs.access(actualImagePath).then(() => true).catch(() => false)) {
-            console.log(`Fichier généré trouvé : ${actualImagePath}`);
-
-            // Déplacer et renommer le fichier
-            await fs.rename(actualImagePath, expectedImagePath);
-            console.log(`Image déplacée et renommée de ${actualImageName} à ${expectedImageName}`);
-
-            await generateThumbnail(expectedImagePath, pageNumber, socketId, pdfFileName);
+        if (result.path) {
+            await generateThumbnail(result.path, pageNumber, socketId, pdfFileName);
             console.log(`Vignette générée pour la page ${pageNumber}`);
 
             io.to(socketId).emit('conversionProgress', {
@@ -193,9 +188,9 @@ async function convertPage(socketId, pageNumber, pdfPath, pdfFileName) {
                 highRes: `/highres/${expectedImageName}`
             });
 
-            return expectedImagePath;
+            return result.path;
         } else {
-            throw new Error(`Le fichier généré n'a pas été trouvé : ${actualImagePath}`);
+            throw new Error(`Le fichier généré n'a pas été trouvé pour la page ${pageNumber}`);
         }
     } catch (error) {
         console.error(`Erreur lors de la conversion de la page ${pageNumber}:`, error);
